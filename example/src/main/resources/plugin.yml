@@ -1,0 +1,9 @@
+name: AnalyticsExample
+version: ${version}
+main: com.gamepathics.paexample.ExamplePlugin
+api-version: '1.20'
+folia-supported: true
+softdepend: [Vault, PlaceholderAPI]
+commands:
+  pademo:
+    description: Fires sample analytics events

@@ -1,0 +1,3 @@
+name: AnalyticsExample
+version: ${version}
+main: com.gamepathics.paexample.bungee.ExampleBungee

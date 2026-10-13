@@ -1,0 +1,24 @@
+# Example config: some choices, some private things that must never be sent.
+storage:
+  type: sqlite
+  mysql:
+    host: db.example.com
+    port: 3306
+    user: arena
+    password: hunter2
+language: en_US
+queue:
+  auto: false
+  max-players: 16
+kits:
+  enabled: true
+  default: warrior
+discord:
+  webhook: https://discord.com/api/webhooks/123/abc
+license-key: ABCD-1234-EFGH-5678
+messages:
+  prefix: "&8[&aArena&8] "
+  win: "You won the game!"
+spawn:
+  world: arena_world
+  x: 120.5

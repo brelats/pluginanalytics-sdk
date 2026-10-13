@@ -1,0 +1,1 @@
+{"id":"analyticsexample","name":"AnalyticsExample","version":"${version}","description":"A test plugin for the PluginAnalytics SDK on Velocity","main":"com.gamepathics.paexample.velocity.ExampleVelocity","dependencies":[]}

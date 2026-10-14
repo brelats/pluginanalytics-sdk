@@ -52,7 +52,7 @@ Each plugin or mod sends a short summary about once a minute (every 30 minutes f
 - **Players** are a hash of their UUID with a secret salt that never leaves the server, different on every server.
 - **Never sent:** player names, UUIDs, IP addresses, chat, what players type, inventories, world data, the server's address or MOTD.
 - **Messages** in errors and logs have names, IP addresses, UUIDs, emails and secrets replaced before sending.
-- **Config values** that could hold something private (passwords, hosts, users, URLs, tokens, names, any text) are never read.
+- **Config values** are only plain choices: true/false, numbers and short single words such as `sqlite` or `en_US`. Lists, longer text, anything that looks like a password, IP or id, and keys that could hold something private (passwords, hosts, users, URLs, tokens, names, messages...) are skipped. See `choice()` and `PRIVATE_KEY` in `Engine.java`, or turn it off with `analytics.trackConfig(false)`.
 
 The full list, for server owners: [pluginanalytics.dev/privacy](https://pluginanalytics.dev/privacy/). The code that builds each batch is in [`Engine.java`](sdk-core/src/main/java/com/gamepathics/pluginanalytics/core/Engine.java).
 

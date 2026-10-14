@@ -8,6 +8,7 @@ import net.md_5.bungee.api.CommandSender;
 import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
+import net.md_5.bungee.api.event.ChatEvent;
 import net.md_5.bungee.api.event.PlayerDisconnectEvent;
 import net.md_5.bungee.api.event.PostLoginEvent;
 import net.md_5.bungee.api.plugin.Listener;
@@ -76,6 +77,18 @@ public final class PluginAnalytics {
             }
         }
 
+        /** "/pa-consent <plugin> allow|deny" from a player with the notify permission. */
+        @EventHandler(priority = EventPriority.LOWEST)
+        public void onChat(ChatEvent e) {
+            if (!e.isCommand() || !e.getMessage().regionMatches(true, 0, "/pa-consent", 0, 11) || !(e.getSender() instanceof ProxiedPlayer)) return;
+            ProxiedPlayer p = (ProxiedPlayer) e.getSender();
+            if (!p.hasPermission(noticePermission)) return;
+            String reply = engine.consentCommand(e.getMessage());
+            if (reply == null) return;
+            e.setCancelled(true);
+            p.sendMessage(TextComponent.fromLegacyText(ChatColor.translateAlternateColorCodes('&', reply)));
+        }
+
         @EventHandler
         public void onDisconnect(PlayerDisconnectEvent e) {
             engine.left(e.getPlayer().getUniqueId());
@@ -124,6 +137,16 @@ public final class PluginAnalytics {
     /** Shows (default) or hides the update notices you configure in the dashboard. */
     public void updateNotices(boolean enabled) {
         engine.updateNotices(enabled);
+    }
+
+    /**
+     * Sends nothing until the network's owner allows it. Call it right after {@link #start}: players with the
+     * notify permission are asked in chat when they join (BungeeCord has no console hook: the owner can also set it in the config); they answer with {@code /pa-consent <plugin> allow}
+     * or {@code deny}. The answer is saved in the shared config ({@code consent-<plugin>}).
+     */
+    public PluginAnalytics requireConsent() {
+        engine.requireConsent();
+        return this;
     }
 
     /** The permission that receives notices on login (default {@code <plugin>.notify}). */

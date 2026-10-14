@@ -15,6 +15,8 @@ public final class ExamplePlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         analytics = PluginAnalytics.start(this, getConfig().getString("analytics-key", System.getProperty("pluginanalytics.key", "pa_example")));
+        // Optional: send nothing until an admin allows it with /pa-consent analyticsexample allow.
+        if (getConfig().getBoolean("require-consent")) analytics.requireConsent();
         analytics.property("storage", () -> "sqlite");
         analytics.property("language", () -> "en");
         analytics.track("plugin_enabled");

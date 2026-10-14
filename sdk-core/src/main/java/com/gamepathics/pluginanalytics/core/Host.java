@@ -84,6 +84,16 @@ public interface Host {
         return Collections.emptyMap();
     }
 
+    /** The id a consent answer is saved under (consent-<id>): the plugin's name, or a mod's id. */
+    default String consentKey() {
+        return name();
+    }
+
+    /** Whether admins can answer a consent request with the pa-consent command (plugins and proxies, not mods). */
+    default boolean consentCommand() {
+        return true;
+    }
+
     /** Logs a line of the SDK's own, through the plugin's logger. */
     void log(Level level, String message);
 

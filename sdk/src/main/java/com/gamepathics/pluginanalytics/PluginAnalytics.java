@@ -14,7 +14,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.plugin.Plugin;
@@ -86,6 +88,27 @@ public final class PluginAnalytics {
             @EventHandler(priority = EventPriority.MONITOR)
             public void onQuit(PlayerQuitEvent e) {
                 engine.left(e.getPlayer().getUniqueId());
+            }
+
+            // "/pa-consent <plugin> allow|deny": answered by an admin, before the server looks the command up.
+            @EventHandler(priority = EventPriority.LOWEST)
+            public void onCommand(PlayerCommandPreprocessEvent e) {
+                if (!e.getMessage().regionMatches(true, 0, "/pa-consent", 0, 11)) return;
+                Player p = e.getPlayer();
+                if (!(p.isOp() || p.hasPermission(noticePermission))) return;
+                String reply = engine.consentCommand(e.getMessage());
+                if (reply == null) return;
+                e.setCancelled(true);
+                p.sendMessage(ChatColor.translateAlternateColorCodes('&', reply));
+            }
+
+            @EventHandler(priority = EventPriority.LOWEST)
+            public void onConsole(ServerCommandEvent e) {
+                if (!e.getCommand().regionMatches(true, 0, "pa-consent", 0, 10) && !e.getCommand().regionMatches(true, 0, "/pa-consent", 0, 11)) return;
+                String reply = engine.consentCommand(e.getCommand());
+                if (reply == null) return;
+                e.setCancelled(true);
+                e.getSender().sendMessage(ChatColor.stripColor(ChatColor.translateAlternateColorCodes('&', reply)));
             }
 
             @EventHandler
@@ -162,6 +185,18 @@ public final class PluginAnalytics {
     @Deprecated
     public void feedbackPrompts(boolean enabled) {
         engine.feedbackPrompts(enabled);
+    }
+
+    /**
+     * Sends nothing until the server's owner allows it. Call it right after {@link #start}: operators (and
+     * players with the notify permission) are asked in chat when they join, and the console too; they answer
+     * with {@code /pa-consent <plugin> allow} or {@code deny}. The answer is saved in
+     * {@code plugins/PluginAnalytics/config.yml} ({@code consent-<plugin>}). Without it, analytics is on unless
+     * the owner turns it off.
+     */
+    public PluginAnalytics requireConsent() {
+        engine.requireConsent();
+        return this;
     }
 
     /** The permission that receives notices on join (default {@code <plugin>.notify}; operators always do). */

@@ -5,6 +5,7 @@ import com.gamepathics.pluginanalytics.core.Engine;
 import com.gamepathics.pluginanalytics.core.Host;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.command.CommandExecuteEvent;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
@@ -86,6 +87,18 @@ public final class PluginAnalytics {
             }
         }
 
+        /** "/pa-consent <plugin> allow|deny", from a player with the notify permission or the console. */
+        @Subscribe
+        public void onCommand(CommandExecuteEvent e) {
+            if (!e.getCommand().regionMatches(true, 0, "pa-consent", 0, 10)) return;
+            CommandSource source = e.getCommandSource();
+            if (source instanceof Player && !source.hasPermission(noticePermission)) return;
+            String reply = engine.consentCommand(e.getCommand());
+            if (reply == null) return;
+            e.setResult(CommandExecuteEvent.CommandResult.denied());
+            source.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(reply));
+        }
+
         @Subscribe
         public void onDisconnect(DisconnectEvent e) {
             engine.left(e.getPlayer().getUniqueId());
@@ -139,6 +152,16 @@ public final class PluginAnalytics {
     /** Shows (default) or hides the update notices you configure in the dashboard. */
     public void updateNotices(boolean enabled) {
         engine.updateNotices(enabled);
+    }
+
+    /**
+     * Sends nothing until the network's owner allows it. Call it right after {@link #start}: players with the
+     * notify permission are asked in chat when they join, and the console too; they answer with {@code /pa-consent <plugin> allow}
+     * or {@code deny}. The answer is saved in the shared config ({@code consent-<plugin>}).
+     */
+    public PluginAnalytics requireConsent() {
+        engine.requireConsent();
+        return this;
     }
 
     /** The permission that receives notices on login (default {@code <pluginid>.notify}). */

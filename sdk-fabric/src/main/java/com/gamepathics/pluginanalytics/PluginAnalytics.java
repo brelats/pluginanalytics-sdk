@@ -207,6 +207,18 @@ public final class PluginAnalytics {
         engine.captureError(error);
     }
 
+    /**
+     * Sends nothing until it's allowed. Call it right after {@link #start}. In a player's game, Minecraft's
+     * Yes/No screen asks the player the first time the title screen opens (one mod at a time, once per mod);
+     * on a dedicated server, the log asks the owner to set {@code consent-<modid>: true} in
+     * {@code config/pluginanalytics.yml}, where every answer is saved.
+     */
+    public PluginAnalytics requireConsent() {
+        engine.requireConsent();
+        if (client && engine.consentPending()) ConsentScreen.ask(engine.name(), engine);
+        return this;
+    }
+
     /** Stops collecting and sends the last batch. Called automatically when the server or game stops. */
     public void stop() {
         engine.stop();
@@ -343,6 +355,8 @@ public final class PluginAnalytics {
         @Override public String sharedConfigPath() { return "config/pluginanalytics.yml"; }
         @Override public String platform() { return client ? "fabric-client" : "fabric"; }
         @Override public boolean client() { return client; }
+        @Override public boolean consentCommand() { return false; }
+        @Override public String consentKey() { return modId; }
         @Override public String software() { return "Fabric Loader " + modVersion("fabricloader"); }
         @Override public String minecraftVersion() { return modVersion("minecraft"); }
         @Override public Boolean onlineMode() { return client ? null : mc.onlineMode(server); }

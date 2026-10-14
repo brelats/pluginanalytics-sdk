@@ -20,6 +20,8 @@ final class SharedConfig {
     String salt;
     boolean logSent;
     boolean notifyAdmins = true;
+    /** Answers to plugins and mods that ask for consent first (consent-<id>: true or false). */
+    final Map<String, Boolean> consent = new LinkedHashMap<String, Boolean>();
 
     static SharedConfig load(File file, String shownPath, boolean client) {
         SharedConfig c = new SharedConfig();
@@ -47,6 +49,9 @@ final class SharedConfig {
         c.notifyAdmins = !"false".equalsIgnoreCase(values.get("notify-admins"));
         c.serverId = valid(values.get("server-id")) ? values.get("server-id") : null;
         c.salt = values.get("salt");
+        for (Map.Entry<String, String> e : values.entrySet()) {
+            if (e.getKey().startsWith("consent-") && e.getKey().length() > 8) c.consent.put(e.getKey().substring(8), "true".equalsIgnoreCase(e.getValue()));
+        }
         if (c.serverId == null) {
             c.serverId = UUID.randomUUID().toString();
             write = true;
@@ -59,6 +64,13 @@ final class SharedConfig {
         if (!values.containsKey("notify-admins") && !client) write = true; // added after the first release: write it so owners find it
         if (write) save(file, shownPath, c, client);
         return c;
+    }
+
+    /** Saves one consent answer, keeping everything else in the file. */
+    static synchronized void saveConsent(File file, String shownPath, boolean client, String id, boolean allowed) {
+        SharedConfig c = load(file, shownPath, client);
+        c.consent.put(id, allowed);
+        save(file, shownPath, c, client);
     }
 
     private static boolean valid(String id) {
@@ -88,6 +100,10 @@ final class SharedConfig {
         b.append("salt: ").append(c.salt).append('\n');
         b.append("log-sent-data: ").append(c.logSent).append('\n');
         if (!client) b.append("notify-admins: ").append(c.notifyAdmins).append('\n');
+        if (!c.consent.isEmpty()) {
+            b.append("# Plugins and mods that asked before sending anything: true allows one, false refuses.\n");
+            for (Map.Entry<String, Boolean> e : c.consent.entrySet()) b.append("consent-").append(e.getKey()).append(": ").append(e.getValue()).append('\n');
+        }
         try {
             File dir = file.getParentFile();
             if (dir != null) dir.mkdirs();

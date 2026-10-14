@@ -53,7 +53,7 @@ import java.util.zip.GZIPOutputStream;
  */
 public final class Engine {
 
-    public static final String SDK_VERSION = "1.7.0";
+    public static final String SDK_VERSION = "1.8.0";
     private static final String DEFAULT_ENDPOINT = "https://pluginanalytics.dev/api/v1/ingest";
     private static final long INTERVAL_MINUTES = 60;
     /** Clients send over HTTP only, this often: a live connection per player's game would be wasteful. */
@@ -84,6 +84,12 @@ public final class Engine {
     private final boolean enabled;
     private final boolean logSent;
     private final boolean ownerAllowsNotices;
+    /** Asked for by the developer (requireConsent()): nothing is sent until the owner, or the player in a game, allows it. */
+    private volatile boolean consentRequired;
+    /** The answer saved in the shared config, or null while nobody has answered. */
+    private volatile Boolean consent;
+    /** The plugin's name as a consent key: lowercase letters, digits, - and _. */
+    private final String consentId;
     private final boolean client;
     private final String serverId;
     private final String salt;
@@ -192,6 +198,9 @@ public final class Engine {
         this.salt = config.salt;
         this.logSent = config.logSent;
         this.ownerAllowsNotices = config.notifyAdmins;
+        String id = host.consentKey().toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_-]+", "-").replaceAll("^-+|-+$", "");
+        this.consentId = id.isEmpty() ? "plugin" : id;
+        this.consent = config.consent.get(consentId);
         this.installActor = "p:" + sha256(salt + serverId).substring(0, 16);
         this.endpoint = System.getProperty("pluginanalytics.endpoint", DEFAULT_ENDPOINT);
 
@@ -374,11 +383,85 @@ public final class Engine {
     public List<String> noticesFor(String who) {
         List<String> out = new ArrayList<String>();
         if (!enabled || !ownerAllowsNotices) return out;
+        if (consentPending() && tell(who + "|consent")) out.add(consentPrompt());
         Notice n = update;
         if (n != null && n.admins && updateNotices && tell(who + "|" + n.id)) out.add(n.message);
         Notice fb = feedbackPrompt;
         if (fb != null && feedbackPrompts && tell(who + "|" + fb.id)) out.add(fb.message);
         return out;
+    }
+
+    /* ---------------------------------------------------------------- consent */
+
+    private long lastDropped;
+
+    private boolean consentGiven() {
+        return !consentRequired || Boolean.TRUE.equals(consent);
+    }
+
+    /**
+     * Sends nothing until someone allows it: the server's owner (in game or from the console) or, for a mod in
+     * a player's game, the player. Call it right after starting. The answer is saved in the shared config.
+     */
+    public void requireConsent() {
+        if (consentRequired) return;
+        consentRequired = true;
+        if (enabled && consent == null && !client) {
+            say(Level.INFO, host.name() + " asks before sending anonymous usage statistics to its developer; nothing is sent until you answer. "
+                + (host.consentCommand() ? "Allow it with \"pa-consent " + consentId + " allow\" (or deny), or set " : "Allow it by setting ")
+                + "consent-" + consentId + ": true in " + host.sharedConfigPath() + ". What's sent: https://pluginanalytics.dev/privacy");
+        }
+    }
+
+    /** Logs a line of the SDK's own through the plugin's logger (used by platform code such as the consent screen). */
+    public void log(Level level, String message) {
+        say(level, message);
+    }
+
+    /** Whether consent was asked for and nobody has answered yet. */
+    public boolean consentPending() {
+        return enabled && consentRequired && consent == null;
+    }
+
+    /** The plugin or mod's display name. */
+    public String name() {
+        return host.name();
+    }
+
+    /** The plugin's id in consent commands and the config ("arenaplus"). */
+    public String consentId() {
+        return consentId;
+    }
+
+    /** Records the answer, here and in the shared config. */
+    public void consent(boolean allowed) {
+        consent = allowed;
+        SharedConfig.saveConsent(host.sharedConfig(), host.sharedConfigPath(), client, consentId, allowed);
+        say(Level.INFO, host.name() + (allowed ? ": anonymous usage statistics allowed, thanks." : ": anonymous usage statistics refused; nothing will be sent."));
+    }
+
+    /** The chat message asking an admin, with & color codes. */
+    public String consentPrompt() {
+        return "&6[PluginAnalytics] &f" + host.name() + " &7would like to send anonymous usage statistics to its developer "
+            + "(server and plugin versions, how its features are used; never player names, IPs or chat). "
+            + "&aAllow: /pa-consent " + consentId + " allow &7or &cdeny: /pa-consent " + consentId + " deny &7- pluginanalytics.dev/privacy";
+    }
+
+    /**
+     * Handles "pa-consent <id> allow|deny" typed by someone allowed to answer (an admin, the console). Returns
+     * the reply, or null when the command isn't for this plugin. "pa-consent" alone repeats the question.
+     */
+    public String consentCommand(String line) {
+        String[] parts = line.trim().replaceFirst("^/", "").split("\\s+");
+        if (parts.length == 0 || !parts[0].equalsIgnoreCase("pa-consent") || !consentRequired || !enabled) return null;
+        if (parts.length == 1) return consent == null ? consentPrompt() : null;
+        if (!parts[1].equalsIgnoreCase(consentId)) return null;
+        if (parts.length < 3 || !(parts[2].equalsIgnoreCase("allow") || parts[2].equalsIgnoreCase("deny"))) {
+            return "&7Usage: /pa-consent " + consentId + " allow|deny";
+        }
+        boolean allow = parts[2].equalsIgnoreCase("allow");
+        consent(allow);
+        return allow ? "&a" + host.name() + " may now send anonymous usage statistics. Thanks!" : "&c" + host.name() + " won't send anything.";
     }
 
     /** Whether the owner lets notices reach admins in game (notify-admins in the shared config). */
@@ -516,7 +599,7 @@ public final class Engine {
         // A last batch on the way out, so a server stopped minutes after starting isn't missed. Sent right here,
         // while the plugin's classes can still load (they can't once it's disabled), with short timeouts.
         finalBatch = true;
-        finalSend();
+        if (consentGiven()) finalSend();
         if (sampler != null) sampler.interrupt();
         if (host.watchJavaLogging()) Logger.getLogger("").removeHandler(errorHandler);
         Logger jul = host.julLogger();
@@ -1020,6 +1103,14 @@ public final class Engine {
     private void tick() {
         try {
             long now = System.currentTimeMillis();
+            // Waiting for consent, or refused: nothing goes out, and what was counted is dropped.
+            if (!consentGiven()) {
+                if (now - lastDropped > 60_000) {
+                    lastDropped = now;
+                    take(now);
+                }
+                return;
+            }
             Live l = live;
             boolean connected = l != null && l.open;
             if (!connected && !client && now >= nextLiveAttempt && !Boolean.getBoolean("pluginanalytics.httpOnly")) {

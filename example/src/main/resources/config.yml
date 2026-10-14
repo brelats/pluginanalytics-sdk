@@ -1,4 +1,6 @@
 # Example config: some choices, some private things that must never be sent.
+# Ask the server owner before sending anything (they answer in chat or the console).
+require-consent: false
 storage:
   type: sqlite
   mysql:

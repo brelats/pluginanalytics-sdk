@@ -28,7 +28,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.gamepathics:pluginanalytics-bukkit:1.7.0")
+    implementation("com.gamepathics:pluginanalytics-bukkit:1.8.0")
 }
 
 tasks.shadowJar {
